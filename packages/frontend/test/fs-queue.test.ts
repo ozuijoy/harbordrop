@@ -100,3 +100,30 @@ describe("檔案總管上傳佇列：清除已完成", () => {
     expect(c.queue.items.map((i) => i.status)).toEqual(["error", "waiting"]);
   });
 });
+
+describe("上傳錯誤訊息：不顯示 [object Object]", () => {
+  it("一般 Error 原樣回傳", () => {
+    expect(c.readableError(new Error("boom"))).toBe("boom");
+  });
+
+  it("HubApiError 形狀：取出 data.error.message", () => {
+    const e: any = new Error("[object Object]. URL: https://x.example/commit/main");
+    e.data = { error: { code: "bad_request", message: "commit 內容不符" } };
+    expect(c.readableError(e)).toBe("commit 內容不符");
+  });
+
+  it("純物件 {error: 字串}：用該字串", () => {
+    expect(c.readableError({ error: "oops" })).toBe("oops");
+  });
+
+  it("純物件 {error: {message}}：用裡面的 message", () => {
+    expect(c.readableError({ error: { message: "nested" } })).toBe("nested");
+  });
+
+  it("去不掉的物件：JSON 化，不出現 [object Object]", () => {
+    const out = c.readableError({ code: 1 });
+    expect(out).toBe('{"code":1}');
+    expect(out).not.toContain("[object Object]");
+
+  });
+});

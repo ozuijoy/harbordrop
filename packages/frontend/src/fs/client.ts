@@ -263,8 +263,22 @@ async function run(it0: QueueItem) {
     listeners.forEach((f) => f(it.notifyDir ?? it.dir));
   } catch (e: any) {
     it.status = it.ctrl.signal.aborted ? "canceled" : "error";
-    it.error = it.status === "canceled" ? "" : e?.message ?? String(e);
+    it.error = it.status === "canceled" ? "" : readableError(e);
   } finally {
     pump();
+  }
+}
+
+/** 錯誤可能是純物件（無 message），直接 String() 會變成 "[object Object]"；先拆出裡面的訊息。 */
+export function readableError(e: any): string {
+  if (e instanceof Error && e.message && !e.message.startsWith("[object Object]")) return e.message;
+  const inner = e?.data?.error ?? e?.error;
+  if (typeof inner === "string" && inner) return inner;
+  if (typeof inner?.message === "string" && inner.message) return inner.message;
+  if (typeof e?.message === "string" && e.message) return e.message.replace(/^\[object Object\]\.?\s*/, "") || JSON.stringify(e);
+  try {
+    return JSON.stringify(e) || String(e);
+  } catch {
+    return String(e);
   }
 }

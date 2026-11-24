@@ -92,18 +92,22 @@ export async function uploadXet(
   });
   let phase: "hashing" | "uploading" | "committing" = "hashing";
   let lastEmit = 0;
-  for await (const ev of iter) {
-    if (ev.event === "phase") {
-      if (ev.phase === "committing") phase = "committing";
-      hooks.onProgress?.({ phase, fraction: phase === "committing" ? 1 : 0, total: file.size });
-    } else if (ev.event === "fileProgress") {
-      const next = ev.state === "hashing" ? "hashing" : "uploading";
-      // 雜湊階段事件極多（每個讀取區塊一次），節流到每 100ms 一次
-      if (next === phase && ev.progress < 1 && Date.now() - lastEmit < 100) continue;
-      lastEmit = Date.now();
-      phase = next;
-      hooks.onProgress?.({ phase, fraction: ev.progress, loaded: Math.round(ev.progress * file.size), total: file.size });
+  try {
+    for await (const ev of iter) {
+      if (ev.event === "phase") {
+        if (ev.phase === "committing") phase = "committing";
+        hooks.onProgress?.({ phase, fraction: phase === "committing" ? 1 : 0, total: file.size });
+      } else if (ev.event === "fileProgress") {
+        const next = ev.state === "hashing" ? "hashing" : "uploading";
+        // 雜湊階段事件極多（每個讀取區塊一次），節流到每 100ms 一次
+        if (next === phase && ev.progress < 1 && Date.now() - lastEmit < 100) continue;
+        lastEmit = Date.now();
+        phase = next;
+        hooks.onProgress?.({ phase, fraction: ev.progress, loaded: Math.round(ev.progress * file.size), total: file.size });
+      }
     }
+  } catch (e) {
+    throw new Error(hubErrorMessage(e));
   }
   stats.finishedAt = Date.now();
   return stats;
@@ -154,18 +158,43 @@ export async function uploadXetBatch(
     useXet: true,
     abortSignal: hooks.signal,
   });
-  for await (const ev of iter) {
-    if (ev.event === "phase") {
-      if (ev.phase === "committing") {
-        committing = true;
-        emit(true);
+  try {
+    for await (const ev of iter) {
+      if (ev.event === "phase") {
+        if (ev.phase === "committing") {
+          committing = true;
+          emit(true);
+        }
+      } else if (ev.event === "fileProgress") {
+        prog.set(ev.path, { fraction: ev.progress, state: ev.state === "hashing" ? "hashing" : "uploading" });
+        emit(ev.progress >= 1);
       }
-    } else if (ev.event === "fileProgress") {
-      prog.set(ev.path, { fraction: ev.progress, state: ev.state === "hashing" ? "hashing" : "uploading" });
-      emit(ev.progress >= 1);
     }
+  } catch (e) {
+    throw new Error(hubErrorMessage(e));
   }
   emit(true);
   stats.finishedAt = Date.now();
   return stats;
+}
+
+/**
+ * @huggingface/hub 的 createApiError 會把回應 JSON 的 error 欄位直接放進
+ * message；後端回的是 {error: {code, message}} 物件，message 就變成
+ * "[object Object]. URL: ..."——先從 data 裡取出真正的訊息再丟出。
+ */
+export function hubErrorMessage(e: any): string {
+  const inner = e?.data?.error;
+  const msg = typeof inner === "string" ? inner : inner?.message;
+  if (typeof msg === "string" && msg) {
+    const m = typeof e?.message === "string" ? e.message : "";
+    const trailer = m.includes("URL: ") ? m.slice(m.indexOf("URL: ")) : "";
+    return trailer ? `${msg}. ${trailer}` : msg;
+  }
+  if (typeof e?.message === "string" && e.message && !e.message.startsWith("[object Object]")) return e.message;
+  try {
+    return JSON.stringify(e?.data ?? e) || String(e);
+  } catch {
+    return String(e);
+  }
 }
