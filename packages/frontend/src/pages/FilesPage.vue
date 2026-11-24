@@ -321,6 +321,7 @@ const thumbSrc = (e: FsEntry) => downloadUrl(e.path, true);
 
     <div v-else-if="view === 'grid' && entries.length" class="grid">
       <div v-for="e in sorted" :key="e.path" class="tile" :class="{ sel: selected.has(e.path), dim: e.hidden }" @click="toggle(e, $event)" @dblclick="open(e)" @contextmenu.prevent.stop="openMenu($event, e)">
+        <button class="ghost mini tile-menu" @click.stop="openMenu($event, e)">⋯</button>
         <div class="ico"><img v-if="showThumb(e)" class="thumb-lg" :src="thumbSrc(e)" loading="lazy" alt="" @error="thumbFailed.add(e.path)" /><template v-else>{{ icon(e) }}</template></div>
         <a href="#" class="nm" @click.prevent.stop="open(e)">{{ e.name }}</a>
         <div class="muted">{{ e.isDir ? "" : formatBytes(e.size ?? NaN) }}</div>
@@ -417,7 +418,8 @@ tr.sel, .tile.sel { background: #f0fdfa; }
 .dim { opacity: 0.55; }
 button.mini { padding: 2px 8px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
-.tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; user-select: none; }
+.tile { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; user-select: none; }
+.tile .tile-menu { position: absolute; top: 4px; right: 4px; padding: 2px 8px; }
 .tile .ico { font-size: 36px; }
 .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; vertical-align: middle; margin-right: 6px; }
 .tile .thumb-lg { width: 100%; height: 96px; object-fit: cover; border-radius: 8px; display: block; }
